@@ -1,6 +1,11 @@
 import streamlit as st
 import pandas as pd
 from typing import Dict
+import matplotlib.pyplot as plt
+from scipy import stats
+import seaborn as sns
+from typing import Dict
+
 
 def mostrar_resumen_valores_faltantes(info_faltantes: Dict):
     """Muestra resumen de valores faltantes en Streamlit"""
@@ -89,3 +94,105 @@ def mostrar_resumen_categoricas(info_categoricas: Dict):
     st.write("**Variables Categóricas:**")
     for columna, valores in info_categoricas.items():
         st.write(f"- **{columna}:** {valores}")
+
+#############################################################################################################
+
+
+def crear_graficos_antes_despues(df: pd.DataFrame, columna_original: str, columna_transformada: str):
+    """Crea gráficos comparativos antes y después de la transformación"""
+    
+    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+    
+    # FILA 1: Datos Originales
+    # Histograma original
+    axes[0,0].hist(df[columna_original], bins=30, alpha=0.7, color='skyblue', edgecolor='black')
+    axes[0,0].set_title('Histograma - Datos Originales', fontweight='bold')
+    axes[0,0].set_xlabel(columna_original)
+    axes[0,0].grid(True, alpha=0.3)
+    
+    # Q-Q plot original
+    stats.probplot(df[columna_original], dist="norm", plot=axes[0,1])
+    axes[0,1].set_title('Q-Q Plot - Datos Originales')
+    axes[0,1].grid(True, alpha=0.3)
+    
+    # Boxplot original por grupo
+    if 'group' in df.columns:
+        sns.boxplot(data=df, x='group', y=columna_original, ax=axes[0,2])
+        axes[0,2].set_title('Boxplot por Grupo - Originales')
+        axes[0,2].grid(True, alpha=0.3)
+    
+    # FILA 2: Datos Transformados
+    # Histograma transformado
+    axes[1,0].hist(df[columna_transformada], bins=30, alpha=0.7, color='lightcoral', edgecolor='black')
+    axes[1,0].set_title('Histograma - Datos Transformados (log)', fontweight='bold')
+    axes[1,0].set_xlabel(columna_transformada)
+    axes[1,0].grid(True, alpha=0.3)
+    
+    # Q-Q plot transformado
+    stats.probplot(df[columna_transformada], dist="norm", plot=axes[1,1])
+    axes[1,1].set_title('Q-Q Plot - Datos Transformados (log)')
+    axes[1,1].grid(True, alpha=0.3)
+    
+    # Boxplot transformado por grupo
+    if 'group' in df.columns:
+        sns.boxplot(data=df, x='group', y=columna_transformada, ax=axes[1,2])
+        axes[1,2].set_title('Boxplot por Grupo - Transformados (log)')
+        axes[1,2].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    return fig
+
+def mostrar_comparacion_estadisticas_simple(estadisticas: Dict):
+    """Muestra comparación simple de estadísticas antes y después"""
+    
+    st.subheader("📊 Comparación Estadística: Antes vs Después")
+    
+    # Crear DataFrame comparativo
+    df_comparacion = pd.DataFrame({
+        'Estadística': ['Media', 'Desv. Estándar', 'Asimetría', 'Curtosis', 'Mínimo', 'Máximo'],
+        'Datos Originales': [
+            f"{estadisticas['original']['media']:.2f}",
+            f"{estadisticas['original']['std']:.2f}",
+            f"{estadisticas['original']['asimetria']:.3f}",
+            f"{estadisticas['original']['curtosis']:.3f}",
+            f"{estadisticas['original']['min']:.2f}",
+            f"{estadisticas['original']['max']:.2f}"
+        ],
+        'Datos Transformados (log)': [
+            f"{estadisticas['transformado']['media']:.3f}",
+            f"{estadisticas['transformado']['std']:.3f}",
+            f"{estadisticas['transformado']['asimetria']:.3f}",
+            f"{estadisticas['transformado']['curtosis']:.3f}",
+            f"{estadisticas['transformado']['min']:.3f}",
+            f"{estadisticas['transformado']['max']:.3f}"
+        ]
+    })
+    
+    st.dataframe(df_comparacion, hide_index=True)
+    
+    # Métricas clave
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        mejora_asimetria = abs(estadisticas['original']['asimetria']) - abs(estadisticas['transformado']['asimetria'])
+        st.metric(
+            "Mejora en Asimetría", 
+            f"{mejora_asimetria:.2f}",
+            delta=f"{mejora_asimetria:.2f}"
+        )
+    
+    with col2:
+        asimetria_original = abs(estadisticas['original']['asimetria'])
+        st.metric(
+            "Asimetría Original", 
+            f"{asimetria_original:.2f}",
+            delta=None
+        )
+    
+    with col3:
+        asimetria_transformada = abs(estadisticas['transformado']['asimetria'])
+        st.metric(
+            "Asimetría Transformada", 
+            f"{asimetria_transformada:.2f}",
+            delta=None
+        )

@@ -11,11 +11,12 @@ from etl_data.eda import (
     cargar_datos_test, verificar_valores_faltantes, verificar_duplicados, 
     obtener_tipos_datos, obtener_resumen_categoricas, obtener_resumen_estadistico
 )
+from etl_data.transformaciones import aplicar_transformacion_log, obtener_estadisticas_comparativas
 from visual_tools.streamlit_plots import (
     mostrar_resumen_valores_faltantes, mostrar_resumen_duplicados,
-    mostrar_resumen_estadistico, mostrar_resumen_categoricas
+    mostrar_resumen_estadistico, mostrar_resumen_categoricas,
+    crear_graficos_antes_despues, mostrar_comparacion_estadisticas_simple
 )
-
 # Configuración de la página
 st.set_page_config(page_title="Análisis Técnico", page_icon="📊", layout="wide")
 
@@ -81,42 +82,75 @@ elif seccion_analisis == "Análisis Exploratorio":
         st.error(f"❌ Error al cargar datos: {str(e)}")
         st.stop()
     
-    # Análisis estadístico de HTLS
-    info_estadisticas = obtener_resumen_estadistico(df_test, 'htls')
-    mostrar_resumen_estadistico(info_estadisticas, 'htls')
+    # Crear tabs
+    tab1, tab2 = st.tabs(["Datos Originales", "Transformación Logarítmica"])
     
-    # Resumen de hallazgos
-    st.markdown("---")
-    st.subheader("📋 Resumen de Hallazgos")
+    with tab1:
+        # Análisis estadístico de HTLS original (código existente)
+        info_estadisticas = obtener_resumen_estadistico(df_test, 'htls')
+        mostrar_resumen_estadistico(info_estadisticas, 'htls')
+        
+        # Resumen de hallazgos (código existente)
+        st.markdown("---")
+        st.subheader("📋 Resumen de Hallazgos")
+        
+        # Crear alerta basada en asimetría
+        if abs(info_estadisticas['asimetria']) > 2:
+            st.error("🚨 **Problemas de distribución CRÍTICOS**")
+        elif abs(info_estadisticas['asimetria']) > 1:
+            st.warning("⚠️ **Problemas de distribución MODERADOS**")
+        else:
+            st.success("✅ **Distribución ACEPTABLE**")
+        
+        st.markdown("""
+        ### Resumen de Hallazgos
+        
+        La variable HTLS presenta una distribución extremadamente asimétrica (asimetría = 16.2) con alta variabilidad (CV = 229.7%) y 921 outliers, violando severamente los supuestos de normalidad y homoscedasticidad requeridos para ANOVA. La ausencia de valores negativos o cero permite implementar transformación logarítmica como estrategia correctiva obligatoria. 
+        
+        **Decisión:** Proceder con log(HTLS) para el análisis, validando posteriormente los supuestos mediante pruebas de normalidad y homoscedasticidad, con métodos no paramétricos como contingencia si persisten las violaciones.
+        """)
     
-    # Crear alerta basada en asimetría
-    if abs(info_estadisticas['asimetria']) > 2:
-        tipo_alerta = "error"
-        icono_alerta = "🚨"
-        texto_alerta = "CRÍTICO"
-    elif abs(info_estadisticas['asimetria']) > 1:
-        tipo_alerta = "warning"
-        icono_alerta = "⚠️"
-        texto_alerta = "MODERADO"
-    else:
-        tipo_alerta = "success"
-        icono_alerta = "✅"
-        texto_alerta = "ACEPTABLE"
-    
-    if tipo_alerta == "error":
-        st.error(f"{icono_alerta} **Problemas de distribución {texto_alerta}**")
-    elif tipo_alerta == "warning":
-        st.warning(f"{icono_alerta} **Problemas de distribución {texto_alerta}**")
-    else:
-        st.success(f"{icono_alerta} **Distribución {texto_alerta}**")
-    
-    st.markdown("""
-    ### Resumen de Hallazgos
-    
-    La variable HTLS presenta una distribución extremadamente asimétrica (asimetría = 16.2) con alta variabilidad (CV = 229.7%) y 921 outliers, violando severamente los supuestos de normalidad y homoscedasticidad requeridos para ANOVA. La ausencia de valores negativos o cero permite implementar transformación logarítmica como estrategia correctiva obligatoria. 
-    
-    **Decisión:** Proceder con log(HTLS) para el análisis, validando posteriormente los supuestos mediante pruebas de normalidad y homoscedasticidad, con métodos no paramétricos como contingencia si persisten las violaciones.
-    """)
+    with tab2:
+        st.subheader("🔄 Transformación Logarítmica")
+        
+        # Aplicar transformación
+        with st.spinner("Aplicando transformación logarítmica..."):
+            df_transformado = aplicar_transformacion_log(df_test, 'htls')
+            estadisticas_comparativas = obtener_estadisticas_comparativas(df_transformado, 'htls', 'htls_log')
+        
+        st.success("✅ Transformación logarítmica aplicada exitosamente")
+        
+        # Mostrar gráficos comparativos
+        st.subheader("📊 Comparación Visual: Antes vs Después")
+        fig_comparacion = crear_graficos_antes_despues(df_transformado, 'htls', 'htls_log')
+        st.pyplot(fig_comparacion)
+        
+        # Mostrar estadísticas comparativas
+        mostrar_comparacion_estadisticas_simple(estadisticas_comparativas)
+        
+        # Conclusión
+        st.markdown("---")
+        st.subheader("✅ Resultado de la Transformación")
+        
+        mejora_asimetria = abs(estadisticas_comparativas['original']['asimetria']) - abs(estadisticas_comparativas['transformado']['asimetria'])
+        
+        if mejora_asimetria > 10:
+            st.success("🎉 **Excelente mejora** en la distribución")
+        elif mejora_asimetria > 5:
+            st.success("👍 **Buena mejora** en la distribución")
+        else:
+            st.info("📊 **Mejora moderada** en la distribución")
+        
+        st.markdown(f"""
+        ### 📋 Conclusión de Transformación
+        
+        La transformación logarítmica mejora significativamente la distribución de HTLS:
+        - **Asimetría reducida** de {estadisticas_comparativas['original']['asimetria']:.2f} a {estadisticas_comparativas['transformado']['asimetria']:.2f}
+        - **Distribución más simétrica** para análisis ANOVA
+        - **Todas las observaciones preservadas**
+        
+        **Decisión Final:** Utilizar log(HTLS) para todos los análisis estadísticos posteriores.
+        """)
 
 elif seccion_analisis == "Análisis RCBD":
     st.header("🧪 Análisis RCBD")
