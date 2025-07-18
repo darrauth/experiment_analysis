@@ -196,3 +196,33 @@ def mostrar_comparacion_estadisticas_simple(estadisticas: Dict):
             f"{asimetria_transformada:.2f}",
             delta=None
         )
+
+
+
+
+def crear_boxplots_categoricas(df: pd.DataFrame, variable_respuesta: str, variables_categoricas: list):
+    """Crea boxplots de la variable respuesta vs cada variable categórica"""
+    
+    n_vars = len(variables_categoricas)
+    fig, axes = plt.subplots(1, n_vars, figsize=(8*n_vars, 6))
+    
+    # Si solo hay una variable, axes no es una lista
+    if n_vars == 1:
+        axes = [axes]
+    
+    for i, var_cat in enumerate(variables_categoricas):
+        sns.boxplot(data=df, x=var_cat, y=variable_respuesta, ax=axes[i])
+        axes[i].set_title(f'{variable_respuesta.upper()} por {var_cat.title()}', fontweight='bold', fontsize=14)
+        axes[i].set_xlabel(var_cat.title(), fontsize=12)
+        axes[i].set_ylabel(variable_respuesta.upper(), fontsize=12)
+        axes[i].grid(True, alpha=0.3)
+        
+        # Agregar número de observaciones por grupo
+        for j, grupo in enumerate(df[var_cat].unique()):
+            n_obs = len(df[df[var_cat] == grupo])
+            axes[i].text(j, axes[i].get_ylim()[0], f'n={n_obs}', 
+                        ha='center', va='top', fontsize=10, 
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='lightblue', alpha=0.7))
+    
+    plt.tight_layout()
+    return fig

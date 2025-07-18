@@ -15,8 +15,10 @@ from etl_data.transformaciones import aplicar_transformacion_log, obtener_estadi
 from visual_tools.streamlit_plots import (
     mostrar_resumen_valores_faltantes, mostrar_resumen_duplicados,
     mostrar_resumen_estadistico, mostrar_resumen_categoricas,
-    crear_graficos_antes_despues, mostrar_comparacion_estadisticas_simple
+    crear_graficos_antes_despues, mostrar_comparacion_estadisticas_simple,
+    crear_boxplots_categoricas
 )
+
 # Configuración de la página
 st.set_page_config(page_title="Análisis Técnico", page_icon="📊", layout="wide")
 
@@ -83,24 +85,37 @@ elif seccion_analisis == "Análisis Exploratorio":
         st.stop()
     
     # Crear tabs
-    tab1, tab2 = st.tabs(["Datos Originales", "Transformación Logarítmica"])
+    tab1, tab2, tab3 = st.tabs(["Datos Originales", "Transformación Logarítmica", "Análisis Gráfico"])
     
     with tab1:
-        # Análisis estadístico de HTLS original (código existente)
+        # Análisis estadístico de HTLS original
         info_estadisticas = obtener_resumen_estadistico(df_test, 'htls')
         mostrar_resumen_estadistico(info_estadisticas, 'htls')
         
-        # Resumen de hallazgos (código existente)
+        # Resumen de hallazgos
         st.markdown("---")
         st.subheader("📋 Resumen de Hallazgos")
         
         # Crear alerta basada en asimetría
         if abs(info_estadisticas['asimetria']) > 2:
-            st.error("🚨 **Problemas de distribución CRÍTICOS**")
+            tipo_alerta = "error"
+            icono_alerta = "🚨"
+            texto_alerta = "CRÍTICO"
         elif abs(info_estadisticas['asimetria']) > 1:
-            st.warning("⚠️ **Problemas de distribución MODERADOS**")
+            tipo_alerta = "warning"
+            icono_alerta = "⚠️"
+            texto_alerta = "MODERADO"
         else:
-            st.success("✅ **Distribución ACEPTABLE**")
+            tipo_alerta = "success"
+            icono_alerta = "✅"
+            texto_alerta = "ACEPTABLE"
+        
+        if tipo_alerta == "error":
+            st.error(f"{icono_alerta} **Problemas de distribución {texto_alerta}**")
+        elif tipo_alerta == "warning":
+            st.warning(f"{icono_alerta} **Problemas de distribución {texto_alerta}**")
+        else:
+            st.success(f"{icono_alerta} **Distribución {texto_alerta}**")
         
         st.markdown("""
         ### Resumen de Hallazgos
@@ -151,6 +166,74 @@ elif seccion_analisis == "Análisis Exploratorio":
         
         **Decisión Final:** Utilizar log(HTLS) para todos los análisis estadísticos posteriores.
         """)
+    
+    with tab3:
+        st.subheader("📊 Análisis Gráfico por Variables Categóricas")
+        
+        # Crear selectbox para elegir qué datos usar
+        tipo_datos = st.selectbox(
+            "Selecciona los datos a visualizar:",
+            ["Datos Originales (HTLS)", "Datos Transformados (log-HTLS)"],
+            index=1
+        )
+        
+        if tipo_datos == "Datos Originales (HTLS)":
+            variable_respuesta = 'htls'
+            df_analisis = df_test
+        else:
+            # Aplicar transformación si no existe
+            if 'htls_log' not in df_test.columns:
+                df_analisis = aplicar_transformacion_log(df_test, 'htls')
+            else:
+                df_analisis = df_test
+            variable_respuesta = 'htls_log'
+        
+        # Crear boxplots
+        st.write("**Distribución de la variable respuesta por categorías:**")
+        variables_categoricas = ['group', 'management']
+        
+        fig_boxplots = crear_boxplots_categoricas(df_analisis, variable_respuesta, variables_categoricas)
+        st.pyplot(fig_boxplots)
+        
+        # Mostrar estadísticas básicas por grupo
+        st.subheader("📋 Estadísticas Descriptivas por Grupo")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Por Tratamiento (Group):**")
+            stats_group = df_analisis.groupby('group')[variable_respuesta].agg([
+                'count', 'mean', 'std', 'min', 'max'
+            ]).round(3)
+            st.dataframe(stats_group)
+        
+        with col2:
+            st.write("**Por Bloque (Management):**")
+            stats_management = df_analisis.groupby('management')[variable_respuesta].agg([
+                'count', 'mean', 'std', 'min', 'max'
+            ]).round(3)
+            st.dataframe(stats_management)
+        
+        # Interpretación rápida
+        st.markdown("---")
+        st.subheader("💡 Interpretación Visual")
+        
+        # Análisis automático básico
+        media_test = df_analisis[df_analisis['group'] == 'Test'][variable_respuesta].mean()
+        media_control = df_analisis[df_analisis['group'] == 'Control'][variable_respuesta].mean()
+        diferencia = media_test - media_control
+        
+  
+        
+        st.info(f"""
+        **Observación inicial:** El grupo Test muestra una media ligeramente mayor que el de Control 
+        (diferencia: {diferencia:.3f}).
+        
+        **Variabilidad entre bloques (Management):** Se observan diferencias entre gerencias, 
+        lo que justifica el uso del diseño de bloques para controlar esta fuente de variación.
+        
+        **Próximo paso:** Análisis ANOVA formal para determinar significancia estadística.
+        """)
 
 elif seccion_analisis == "Análisis RCBD":
     st.header("🧪 Análisis RCBD")
@@ -159,6 +242,3 @@ elif seccion_analisis == "Análisis RCBD":
 elif seccion_analisis == "Comparación de Modelos":
     st.header("⚖️ Comparación de Modelos")
     st.info("Sección en desarrollo...")
-
-
-
